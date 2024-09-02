@@ -6,11 +6,13 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.zip.GZIPInputStream;
 
 import com.google.common.io.Resources;
+import me.lemire.integercompression.differential.IntegratedIntCompressor;
 import org.junit.Assert;
 import org.junit.Test;
 import gr.uoa.di.networkanalysis.EvolvingMultiGraph;
@@ -42,6 +44,7 @@ public class TestStore {
 
 	// cbtComm
 	private static final String graphFile =  "cbtComm-sorted.txt.gz";
+	private static String sampleFile = "cbtComm-sample.txt";
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
@@ -64,7 +67,6 @@ public class TestStore {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
-				k,
 				basename,
 				aggregation
 		);
@@ -83,7 +85,6 @@ public class TestStore {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
-				k,
 				basename,
 				aggregation
 		);
@@ -145,5 +146,22 @@ public class TestStore {
 			}
 
 		}
+	}
+
+	@Test
+	public void mytest() {
+
+		IntegratedIntCompressor iic = new IntegratedIntCompressor();
+		int[] data = new int[2342351];
+		for(int k = 0; k < data.length; ++k)
+			data[k] = k;
+		//System.out.println("orig: "+Arrays.toString(data));
+		System.out.println("Compressing "+data.length+" integers using friendly interface");
+		int[] compressed = iic.compress(data);
+		//System.out.println("compressed: "+Arrays.toString(compressed));
+		int[] recov = iic.uncompress(compressed);
+		//System.out.println("uncompress: "+Arrays.toString(recov));
+		System.out.println("compressed from "+data.length*4/1024+"KB to "+compressed.length*4/1024+"KB");
+		if(!Arrays.equals(recov,data)) throw new RuntimeException("bug");
 	}
 }
