@@ -83,8 +83,8 @@ public class EvolvingMultiGraph {
             dos.flush();
             byte[] compressedBytes = baos.toByteArray();
 
-            // Write the size of the compressed data (in bytes)
-            int compressedSize = compressedBytes.length;
+            // Write the size of the compressed data (in bits)
+            int compressedSize = compressedBytes.length * 8;
             obs.writeInt(compressedSize,32); // Write the size
 
             // Write compressed bytes to OutputBitStream bit by bit
@@ -256,8 +256,8 @@ public class EvolvingMultiGraph {
         ibs.position(efindex.getLong(node));
 
         // Read the size of the compressed data
-        int compressedSize = ibs.readInt(32); // Size in bytes
-        int[] compressedData = new int[compressedSize / 4]; // Each int is 4 bytes
+        int compressedSize = ibs.readInt(32); // Size in bits
+        int[] compressedData = new int[compressedSize / 32]; // Each int is 32 bits
 
         // Read the compressed data as ints
         for (int i = 0; i < compressedData.length; i++) {
@@ -319,7 +319,7 @@ public class EvolvingMultiGraph {
             ibs.position(position);
 
             int compressedSize = ibs.readInt(32); // Read the size of the compressed data
-            int[] compressedData = new int[compressedSize / 4]; // Initialize array to hold compressed data
+            int[] compressedData = new int[compressedSize / 32]; // Initialize array to hold compressed data
 
             for (int i = 0; i < compressedData.length; i++) {
                 compressedData[i] = ibs.readInt(32); // Read the compressed ints
