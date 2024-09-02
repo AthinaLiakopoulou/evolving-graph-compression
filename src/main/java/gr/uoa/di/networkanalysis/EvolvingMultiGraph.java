@@ -1,44 +1,26 @@
 package gr.uoa.di.networkanalysis;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Reader;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.io.*;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 
 import it.unimi.dsi.bits.Fast;
-import it.unimi.dsi.fastutil.BigArrays;
 import it.unimi.dsi.fastutil.io.BinIO;
 import it.unimi.dsi.fastutil.io.FastMultiByteArrayInputStream;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.io.InputBitStream;
 import it.unimi.dsi.io.OutputBitStream;
 import it.unimi.dsi.sux4j.util.EliasFanoMonotoneLongBigList;
-import it.unimi.dsi.webgraph.ArcListASCIIGraph;
 import it.unimi.dsi.webgraph.LazyIntIterator;
+import me.lemire.integercompression.differential.IntegratedIntCompressor;
 
 public class EvolvingMultiGraph {
 
     protected String graphFile;
     protected boolean headers;
-    protected int zetaK;
     protected String basename;
     protected long aggregationFactor;
 
@@ -48,16 +30,19 @@ public class EvolvingMultiGraph {
     protected FastMultiByteArrayInputStream timestampsStream;
     protected long minTimestamp;
 
-    LongArrayList offsetsIndex= null;
+    LongArrayList offsetsIndex = null;
     private long currentOffset;
+    private final IntegratedIntCompressor compressor;
+    DebugLogger encode_debugLogger = new DebugLogger("debug_encode.txt");
+    DebugLogger decode_debugLogger = new DebugLogger("debug_decode.txt");
 
-    public EvolvingMultiGraph(String graphFile, boolean headers, int zetaK, String basename, long aggregationFactor) {
+    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, long aggregationFactor) {
         super();
         this.graphFile = graphFile;
         this.headers = headers;
-        this.zetaK = zetaK;
         this.basename = basename;
         this.aggregationFactor = aggregationFactor;
+        this.compressor = new IntegratedIntCompressor();
     }
 
     protected long findMinimumTimestamp() {
@@ -75,20 +60,90 @@ public class EvolvingMultiGraph {
     }
 
     protected long writeTimestampsToFile(List<Long> currentNeighborsTimestamps, OutputBitStream obs, long minTimestamp) throws IOException {
+        // Sort timestamps in ascending order
+        currentNeighborsTimestamps.sort(Long::compareTo);
 
         // Returns the number of bits appended to the file
         long ret = 0;
         long previousNeighborTimestamp = minTimestamp;
+        ArrayList<Integer> periodsBetweenList = new ArrayList<>();
 
-        for(Long seconds: currentNeighborsTimestamps) {
+        // Calculate the periods between the current and previous timestamps
+        for(Long seconds : currentNeighborsTimestamps) {
             long periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
             periodsBetween = Fast.int2nat(periodsBetween);
+            periodsBetweenList.add((int) periodsBetween);  // Store the period
             previousNeighborTimestamp = seconds;
-            ret += obs.writeLongZeta(periodsBetween, zetaK);
         }
 
+        // Convert list to int array
+        int[] periodsArray = periodsBetweenList.stream().mapToInt(i -> i).toArray();
+
+        // Check if compression is beneficial
+        int[] compressedData = compressor.compress(periodsArray);
+        int uncompressedSizeBits = periodsArray.length * 32; // Total bits if uncompressed
+        int compressedSizeBits = compressedData.length * 32; // Assuming each int is 32 bits
+
+        // If compression is not effective or array is too small, store uncompressed
+        if (periodsArray.length < 128 || compressedSizeBits >= uncompressedSizeBits) {
+            obs.writeBit(0); // 0 indicates uncompressed
+            obs.writeInt(periodsArray.length, 32); // Write the number of periods (to ensure correct reading)
+            for (int period : periodsArray) {
+                obs.writeInt(period, 32); // Write each period as an int (uncompressed)
+            }
+            ret += 1 + 32 + uncompressedSizeBits; // 1 bit for flag + 32 bits for length + uncompressed size
+            encode_debugLogger.log("Stored uncompressed data for array length: " + periodsArray.length);
+            return ret;
+        }
+
+        // If compression is beneficial, store compressed data
+        obs.writeBit(1); // 1 indicates compressed
+        obs.writeInt(compressedSizeBits, 32); // Write compressed size in bits
+        for (int value : compressedData) {
+            obs.writeInt(value, 32); // Write each int as 32 bits
+        }
+
+        ret += 1 + 32 + compressedSizeBits; // 1 bit for flag + 32 bits for size + compressed size
+        encode_debugLogger.log("Stored compressed data, original length: " + periodsArray.length + ", compressed length: " + compressedData.length);
         return ret;
     }
+
+    protected int[] readTimestampsFromFile(InputBitStream ibs) throws IOException {
+        // Read the compression flag
+        boolean isCompressed = ibs.readBit() == 1;
+        int[] decompressedData;
+
+        if (isCompressed) {
+            // Read the size of the compressed data
+            int compressedSize = ibs.readInt(32); // Size in bits
+            int numCompressedInts = (compressedSize + 31) / 32; // Number of 32-bit ints
+            int[] compressedData = new int[numCompressedInts];
+
+            // Read the compressed data
+            for (int i = 0; i < numCompressedInts; i++) {
+                compressedData[i] = ibs.readInt(32); // Each int is 32 bits
+            }
+
+            // Decompress the data
+            decompressedData = compressor.uncompress(compressedData);
+        } else {
+            // Read uncompressed data directly
+            List<Integer> uncompressedList = new ArrayList<>();
+            int length = ibs.readInt(32); // Number of uncompressed timestamps
+
+            for (int i = 0; i < length; i++) {
+                if (!ibs.hasNext()) {
+                    throw new EOFException("Unexpected end of file while reading uncompressed timestamps.");
+                }
+                uncompressedList.add(ibs.readInt(32)); // Read each int
+            }
+
+            decompressedData = uncompressedList.stream().mapToInt(i -> i).toArray();
+        }
+
+        return decompressedData;
+    }
+
 
     public void store() throws IOException, InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -245,22 +300,34 @@ public class EvolvingMultiGraph {
         }
 
         ibs.position(efindex.getLong(node));
-        // Skip everything up to from
-        long previous = minTimestamp;
-        for(int i =0; i < from; i++) {
-            t = Fast.nat2int(ibs.readLongZeta(zetaK));
-            t = TimestampComparerAggregator.reverse(previous, t, aggregationFactor);
-            previous = t;
+        int[] decompressedData = readTimestampsFromFile(ibs);
+        decode_debugLogger.log("Decompressed Data Length: " + decompressedData.length);
+
+        // Close the InputBitStream
+        ibs.close();
+
+        // Initialize index for accessing decompressed data
+        int index = 0;
+
+        if (from < 0 || to >= decompressedData.length || from > to) {
+            return false;
         }
-        // Scan all the timestamps in the range from->to
-        for(int i = from; i <= to; i++) {
-            t = Fast.nat2int(ibs.readLongZeta(zetaK));
-            t = TimestampComparerAggregator.reverse(previous, t, aggregationFactor);
-            if(t1 <= t && t <= t2) return true;
+
+        // Skip everything up to 'from'
+        long previous = minTimestamp;
+        for (int i = 0; i < from; i++) {
+            t = TimestampComparerAggregator.reverse(previous, decompressedData[index++], aggregationFactor);
             previous = t;
         }
 
-        ibs.close();
+        // Scan all the timestamps in the range 'from' to 'to'
+        for (int i = from; i <= to; i++) {
+            t = TimestampComparerAggregator.reverse(previous, decompressedData[index++], aggregationFactor);
+            if (t1 <= t && t <= t2) {
+                return true;
+            }
+            previous = t;
+        }
 
         return false;
     }
@@ -274,6 +341,8 @@ public class EvolvingMultiGraph {
         LazyIntIterator neighborsIterator;
         InputBitStream ibs;
         long previous;
+        int[] decompressedData; // To store decompressed timestamps
+        int index = 0;
 
         public SuccessorIterator(int node) throws Exception {
             neighborsIterator = graph.successors(node);
@@ -284,7 +353,12 @@ public class EvolvingMultiGraph {
             }
             long position = efindex.getLong(node);
             ibs.position(position);
+
+            decompressedData = readTimestampsFromFile(ibs);
+            decode_debugLogger.log("Decompressed Data Length: " + decompressedData.length);
+
             previous = minTimestamp;
+            ibs.close(); // Close the stream after reading the timestamps
         }
 
         @Override
@@ -299,13 +373,13 @@ public class EvolvingMultiGraph {
                 throw new NoSuchElementException();
             }
             long t;
-            try {
-                t = Fast.nat2int(ibs.readLongZeta(zetaK));
+            if (index < decompressedData.length) {
+                t = Fast.nat2int(decompressedData[index]);
                 t = TimestampComparerAggregator.reverse(previous, t, aggregationFactor);
                 previous = t;
-            }
-            catch(IOException e) {
-                throw new NoSuchElementException(e.toString());
+                index++;
+            } else {
+                throw new NoSuchElementException("No more timestamps available");
             }
             return new Successor(neighbor, t);
         }
@@ -317,10 +391,6 @@ public class EvolvingMultiGraph {
 
     public boolean isHeaders() {
         return headers;
-    }
-
-    public int getZetaK() {
-        return zetaK;
     }
 
     public String getBasename() {
