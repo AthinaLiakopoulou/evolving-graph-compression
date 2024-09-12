@@ -40,7 +40,7 @@ public class EvolvingMultiGraph {
     protected boolean headers;
     protected int zetaK;
     protected String basename;
-    protected long aggregationFactor;
+    protected double aggregationFactor;
 
     protected BVMultiGraph graph;
     protected EliasFanoMonotoneLongBigList efindex;
@@ -51,7 +51,7 @@ public class EvolvingMultiGraph {
     LongArrayList offsetsIndex= null;
     private long currentOffset;
 
-    public EvolvingMultiGraph(String graphFile, boolean headers, int zetaK, String basename, long aggregationFactor) {
+    public EvolvingMultiGraph(String graphFile, boolean headers, int zetaK, String basename, double aggregationFactor) {
         super();
         this.graphFile = graphFile;
         this.headers = headers;
@@ -81,10 +81,10 @@ public class EvolvingMultiGraph {
         long previousNeighborTimestamp = minTimestamp;
 
         for(Long seconds: currentNeighborsTimestamps) {
-            long periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
-            periodsBetween = Fast.int2nat(periodsBetween);
+            double periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
+            periodsBetween = Fast.int2nat(Math.round(periodsBetween));
             previousNeighborTimestamp = seconds;
-            ret += obs.writeLongZeta(periodsBetween, zetaK);
+            ret += obs.writeLongZeta((long) periodsBetween, zetaK);
         }
 
         return ret;
