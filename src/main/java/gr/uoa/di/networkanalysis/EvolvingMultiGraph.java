@@ -25,7 +25,7 @@ public class EvolvingMultiGraph {
     protected String graphFile;
     protected boolean headers;
     protected String basename;
-    protected long aggregationFactor;
+    protected double aggregationFactor;
 
     protected BVMultiGraph graph;
     protected EliasFanoMonotoneLongBigList efindex;
@@ -37,7 +37,7 @@ public class EvolvingMultiGraph {
     private long currentOffset;
     private final IntegratedIntCompressor compressor;
 
-    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, long aggregationFactor) {
+    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, double aggregationFactor) {
         super();
         this.graphFile = graphFile;
         this.headers = headers;
@@ -67,8 +67,8 @@ public class EvolvingMultiGraph {
         long previousNeighborTimestamp = minTimestamp;
 
         for(Long seconds: currentNeighborsTimestamps) {
-            long periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
-            periodsBetween = Fast.int2nat(periodsBetween);
+            double periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
+            periodsBetween = Fast.int2nat(Math.round(periodsBetween));
             previousNeighborTimestamp = seconds;
 
             // Compress the data
