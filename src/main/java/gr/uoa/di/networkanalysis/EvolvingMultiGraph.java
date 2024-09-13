@@ -65,37 +65,41 @@ public class EvolvingMultiGraph {
         // Returns the number of bits appended to the file
         long ret = 0;
         long previousNeighborTimestamp = minTimestamp;
+        ArrayList<Integer> periodsBetweenList = new ArrayList<>();
 
+        // Calculate the periods between the current and previous timestamps
         for(Long seconds: currentNeighborsTimestamps) {
             double periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
             periodsBetween = Fast.int2nat(Math.round(periodsBetween));
+            periodsBetweenList.add((int) periodsBetween);  // Store the period
             previousNeighborTimestamp = seconds;
-
-            // Compress the data
-            int[] compressedData = compressor.compress(new int[]{(int) periodsBetween});
-
-            // Convert int[] to byte[]
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            DataOutputStream dos = new DataOutputStream(baos);
-            for (int value : compressedData) {
-                dos.writeInt(value);
-            }
-            dos.flush();
-            byte[] compressedBytes = baos.toByteArray();
-
-            // Write the size of the compressed data (in bits)
-            int compressedSize = compressedBytes.length * 8;
-            obs.writeInt(compressedSize,32); // Write the size
-
-            // Write compressed bytes to OutputBitStream bit by bit
-            for (byte b : compressedBytes) {
-                for (int i = 7; i >= 0; i--) {
-                    obs.writeBit((b >> i) & 1);
-                }
-            }
-
-            ret += 32 + compressedBytes.length * 8; // Number of bits written
         }
+
+        // Compress all periods together
+        int[] periodsArray = periodsBetweenList.stream().mapToInt(i -> i).toArray(); // Convert to int[]
+        int[] compressedData = compressor.compress(periodsArray);  // Compress all periods at once
+
+        // Convert int[] to byte[] for writing
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        for (int value : compressedData) {
+            dos.writeInt(value);
+        }
+        dos.flush();
+        byte[] compressedBytes = baos.toByteArray();
+
+        // Write the size of the compressed data (in bits)
+        int compressedSize = compressedBytes.length * 8;
+        obs.writeInt(compressedSize, 32); // Write size
+
+        // Write compressed bytes to OutputBitStream bit by bit
+        for (byte b : compressedBytes) {
+            for (int i = 7; i >= 0; i--) {
+                obs.writeBit((b >> i) & 1);
+            }
+        }
+
+        ret += 32 + compressedBytes.length * 8; // Track bits written
         return ret;
     }
 
