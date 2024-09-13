@@ -5,10 +5,7 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.util.*;
 import java.util.zip.GZIPInputStream;
 
 import com.google.common.io.Resources;
@@ -48,7 +45,7 @@ public class TestStore {
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
-	private static double aggregation = 0.99995;
+	private static double aggregation = 0.00001;
 
 	// cbtPow
 //	private static final String graphFile =  "cbtPow-sorted.txt.gz";
@@ -113,6 +110,8 @@ public class TestStore {
             	list.add(new Successor(neighbor, timestamp));
             }
             else {
+
+				list.sort(Comparator.comparing(Successor::getTimestamp));
             	// Check the list so far
             	SuccessorIterator it = emg.successors(current);
             	int i = 0;
@@ -133,6 +132,7 @@ public class TestStore {
             }
         }
 
+		list.sort(Comparator.comparing(Successor::getTimestamp));
         SuccessorIterator it = emg.successors(current);
     	int i = 0;
 		while(true) {

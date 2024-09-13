@@ -1,10 +1,7 @@
 package gr.uoa.di.networkanalysis;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +58,9 @@ public class EvolvingMultiGraph {
     }
 
     protected long writeTimestampsToFile(List<Long> currentNeighborsTimestamps, OutputBitStream obs, long minTimestamp) throws IOException {
+
+        // Sort timestamps in ascending order
+        currentNeighborsTimestamps.sort(Long::compareTo);
 
         // Returns the number of bits appended to the file
         long ret = 0;
