@@ -45,7 +45,7 @@ public class TestStore {
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
-	private static double aggregation = 0.00001;
+	private static double aggregation = 1;
 
 	// cbtPow
 //	private static final String graphFile =  "cbtPow-sorted.txt.gz";
