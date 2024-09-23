@@ -33,6 +33,8 @@ public class EvolvingMultiGraph {
     LongArrayList offsetsIndex = null;
     private long currentOffset;
     private final IntegratedIntCompressor compressor;
+    DebugLogger encode_debugLogger = new DebugLogger("debug_encode.txt");
+    DebugLogger decode_debugLogger = new DebugLogger("debug_decode.txt");
 
     public EvolvingMultiGraph(String graphFile, boolean headers, String basename, double aggregationFactor) {
         super();
@@ -58,7 +60,6 @@ public class EvolvingMultiGraph {
     }
 
     protected long writeTimestampsToFile(List<Long> currentNeighborsTimestamps, OutputBitStream obs, long minTimestamp) throws IOException {
-
         // Sort timestamps in ascending order
         currentNeighborsTimestamps.sort(Long::compareTo);
 
@@ -68,40 +69,81 @@ public class EvolvingMultiGraph {
         ArrayList<Integer> periodsBetweenList = new ArrayList<>();
 
         // Calculate the periods between the current and previous timestamps
-        for(Long seconds: currentNeighborsTimestamps) {
+        for(Long seconds : currentNeighborsTimestamps) {
             double periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
             periodsBetween = Fast.int2nat(Math.round(periodsBetween));
             periodsBetweenList.add((int) periodsBetween);  // Store the period
             previousNeighborTimestamp = seconds;
         }
 
-        // Compress all periods together
-        int[] periodsArray = periodsBetweenList.stream().mapToInt(i -> i).toArray(); // Convert to int[]
-        int[] compressedData = compressor.compress(periodsArray);  // Compress all periods at once
+        // Convert list to int array
+        int[] periodsArray = periodsBetweenList.stream().mapToInt(i -> i).toArray();
 
-        // Convert int[] to byte[] for writing
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        DataOutputStream dos = new DataOutputStream(baos);
-        for (int value : compressedData) {
-            dos.writeInt(value);
-        }
-        dos.flush();
-        byte[] compressedBytes = baos.toByteArray();
+        // Check if compression is beneficial
+        int[] compressedData = compressor.compress(periodsArray);
+        int uncompressedSizeBits = periodsArray.length * 32; // Total bits if uncompressed
+        int compressedSizeBits = compressedData.length * 32; // Assuming each int is 32 bits
 
-        // Write the size of the compressed data (in bits)
-        int compressedSize = compressedBytes.length * 8;
-        obs.writeInt(compressedSize, 32); // Write size
-
-        // Write compressed bytes to OutputBitStream bit by bit
-        for (byte b : compressedBytes) {
-            for (int i = 7; i >= 0; i--) {
-                obs.writeBit((b >> i) & 1);
+        // If compression is not effective or array is too small, store uncompressed
+        if (periodsArray.length < 128 || compressedSizeBits >= uncompressedSizeBits) {
+            obs.writeBit(0); // 0 indicates uncompressed
+            obs.writeInt(periodsArray.length, 32); // Write the number of periods (to ensure correct reading)
+            for (int period : periodsArray) {
+                obs.writeInt(period, 32); // Write each period as an int (uncompressed)
             }
+            ret += 1 + 32 + uncompressedSizeBits; // 1 bit for flag + 32 bits for length + uncompressed size
+            encode_debugLogger.log("Stored uncompressed data for array length: " + periodsArray.length);
+            return ret;
         }
 
-        ret += 32 + compressedBytes.length * 8; // Track bits written
+        // If compression is beneficial, store compressed data
+        obs.writeBit(1); // 1 indicates compressed
+        obs.writeInt(compressedSizeBits, 32); // Write compressed size in bits
+        for (int value : compressedData) {
+            obs.writeInt(value, 32); // Write each int as 32 bits
+        }
+
+        ret += 1 + 32 + compressedSizeBits; // 1 bit for flag + 32 bits for size + compressed size
+        encode_debugLogger.log("Stored compressed data, original length: " + periodsArray.length + ", compressed length: " + compressedData.length);
         return ret;
     }
+
+    protected int[] readTimestampsFromFile(InputBitStream ibs) throws IOException {
+        // Read the compression flag
+        boolean isCompressed = ibs.readBit() == 1;
+        int[] decompressedData;
+
+        if (isCompressed) {
+            // Read the size of the compressed data
+            int compressedSize = ibs.readInt(32); // Size in bits
+            int numCompressedInts = (compressedSize + 31) / 32; // Number of 32-bit ints
+            int[] compressedData = new int[numCompressedInts];
+
+            // Read the compressed data
+            for (int i = 0; i < numCompressedInts; i++) {
+                compressedData[i] = ibs.readInt(32); // Each int is 32 bits
+            }
+
+            // Decompress the data
+            decompressedData = compressor.uncompress(compressedData);
+        } else {
+            // Read uncompressed data directly
+            List<Integer> uncompressedList = new ArrayList<>();
+            int length = ibs.readInt(32); // Number of uncompressed timestamps
+
+            for (int i = 0; i < length; i++) {
+                if (!ibs.hasNext()) {
+                    throw new EOFException("Unexpected end of file while reading uncompressed timestamps.");
+                }
+                uncompressedList.add(ibs.readInt(32)); // Read each int
+            }
+
+            decompressedData = uncompressedList.stream().mapToInt(i -> i).toArray();
+        }
+
+        return decompressedData;
+    }
+
 
     public void store() throws IOException, InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -258,24 +300,16 @@ public class EvolvingMultiGraph {
         }
 
         ibs.position(efindex.getLong(node));
+        int[] decompressedData = readTimestampsFromFile(ibs);
+        decode_debugLogger.log("Decompressed Data Length: " + decompressedData.length);
 
-        // Read the size of the compressed data
-        int compressedSize = ibs.readInt(32); // Size in bits
-        int[] compressedData = new int[compressedSize / 32]; // Each int is 32 bits
-
-        // Read the compressed data as ints
-        for (int i = 0; i < compressedData.length; i++) {
-            compressedData[i] = ibs.readInt(32); // Each int is 32 bits
-        }
-
-        // Decompress the data
-        int[] decompressedData = compressor.uncompress(compressedData);
+        // Close the InputBitStream
+        ibs.close();
 
         // Initialize index for accessing decompressed data
         int index = 0;
 
         if (from < 0 || to >= decompressedData.length || from > to) {
-            ibs.close();
             return false;
         }
 
@@ -294,8 +328,6 @@ public class EvolvingMultiGraph {
             }
             previous = t;
         }
-
-        ibs.close();
 
         return false;
     }
@@ -322,17 +354,11 @@ public class EvolvingMultiGraph {
             long position = efindex.getLong(node);
             ibs.position(position);
 
-            int compressedSize = ibs.readInt(32); // Read the size of the compressed data
-            int[] compressedData = new int[compressedSize / 32]; // Initialize array to hold compressed data
+            decompressedData = readTimestampsFromFile(ibs);
+            decode_debugLogger.log("Decompressed Data Length: " + decompressedData.length);
 
-            for (int i = 0; i < compressedData.length; i++) {
-                compressedData[i] = ibs.readInt(32); // Read the compressed ints
-            }
-
-            // Decompress the data
-            decompressedData = compressor.uncompress(compressedData);
-            
             previous = minTimestamp;
+            ibs.close(); // Close the stream after reading the timestamps
         }
 
         @Override
