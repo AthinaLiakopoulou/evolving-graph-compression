@@ -35,6 +35,11 @@ public class EvolvingMultiGraph {
     private final IntegratedIntCompressor compressor;
     DebugLogger encode_debugLogger = new DebugLogger("debug_encode.txt");
     DebugLogger decode_debugLogger = new DebugLogger("debug_decode.txt");
+    DebugLogger percentages_debugLogger = new DebugLogger("percentages.txt");
+    private int smallListCount = 0;    // Λίστες μικρότερες των 128
+    private int compressedCount = 0;   // Συμπιεσμένες λίστες
+    private int uncompressedCount = 0; // Μη συμπιεσμένες λίστες
+
 
     public EvolvingMultiGraph(String graphFile, boolean headers, String basename, double aggregationFactor) {
         super();
@@ -79,6 +84,11 @@ public class EvolvingMultiGraph {
         // Convert list to int array
         int[] periodsArray = periodsBetweenList.stream().mapToInt(i -> i).toArray();
 
+        // If the size of the list is smaller than 128, increase the counter
+        if (periodsArray.length < 128) {
+            smallListCount++;
+        }
+
         // Check if compression is beneficial
         int[] compressedData = compressor.compress(periodsArray);
         int uncompressedSizeBits = periodsArray.length * 32; // Total bits if uncompressed
@@ -92,6 +102,10 @@ public class EvolvingMultiGraph {
                 obs.writeInt(period, 32); // Write each period as an int (uncompressed)
             }
             ret += 1 + 32 + uncompressedSizeBits; // 1 bit for flag + 32 bits for length + uncompressed size
+
+            // Increase the counter for uncompressed data
+            uncompressedCount++;
+
             encode_debugLogger.log("Stored uncompressed data for array length: " + periodsArray.length);
             return ret;
         }
@@ -104,6 +118,10 @@ public class EvolvingMultiGraph {
         }
 
         ret += 1 + 32 + compressedSizeBits; // 1 bit for flag + 32 bits for size + compressed size
+
+        // Increase the counter for compressed data
+        compressedCount++;
+
         encode_debugLogger.log("Stored compressed data, original length: " + periodsArray.length + ", compressed length: " + compressedData.length);
         return ret;
     }
@@ -148,7 +166,22 @@ public class EvolvingMultiGraph {
     public void store() throws IOException, InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         executorService.execute(()-> {storeBVMultiGraph();});
-        executorService.execute(()-> {storeTimestampsAndIndex();});
+        executorService.execute(()-> {
+            storeTimestampsAndIndex();
+            percentages_debugLogger.log("Sum of lists where lenght < 128: " + smallListCount);
+            percentages_debugLogger.log("Compressed lists: " + compressedCount);
+            percentages_debugLogger.log("Uncompressed lists: " + uncompressedCount);
+
+            // Υπολογισμός ποσοστών
+            int totalLists = compressedCount + uncompressedCount;
+            if (totalLists > 0) {
+                double compressedPercentage = (compressedCount * 100.0) / totalLists;
+                double uncompressedPercentage = (uncompressedCount * 100.0) / totalLists;
+                percentages_debugLogger.log("Percentage of compressed data: " + compressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of uncompressed data: " + uncompressedPercentage + "%");
+            }
+            percentages_debugLogger.close();
+        });
         executorService.shutdown();
         executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
     }
