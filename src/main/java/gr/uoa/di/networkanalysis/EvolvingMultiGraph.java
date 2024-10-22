@@ -46,24 +46,32 @@ public class EvolvingMultiGraph {
             this.fastPForCompressor = new FastPFOR();
         }
 
+        //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
             // Check if the data is suitable for delta compression
             if (isSmallDeltas(data)) {
                 // Use IntegratedIntCompressor for delta compression
                 int[] compressedData = integratedCompressor.compress(data);
-                return prependIndicator(compressedData, 0); // Prepend 0 for IntegratedIntCompressor
+                return prependCompressedSizeUncompressedSizeAndIndicator(compressedData, 0,data.length); // Prepend 0 for IntegratedIntCompressor
             } else {
                 // Use FastPFOR for standard compression
                 int[] compressedData = compressWithFastPFor(data);
-                return prependIndicator(compressedData, 1); // Prepend 1 for FastPFOR
+                return prependCompressedSizeUncompressedSizeAndIndicator(compressedData, 1,data.length); // Prepend 1 for FastPFOR
             }
         }
 
-        private int[] prependIndicator(int[] compressedData, int indicator) {
-            // Create a new array with an additional space for the indicator
-            int[] finalData = new int[compressedData.length + 1];
-            finalData[0] = indicator; // Set the indicator
-            System.arraycopy(compressedData, 0, finalData, 1, compressedData.length);
+        private int[] prependCompressedSizeUncompressedSizeAndIndicator(int[] compressedData, int indicator, int uncompressedSize) {
+            // Create a new array with space for size, indicator, and compressed data
+            int[] finalData = new int[compressedData.length + 3]; // +1 for size, +1 for indicator
+
+            // Set size as the first element
+            finalData[0] = compressedData.length; // Size of the compressed data
+            finalData[1] = uncompressedSize; // Size of the uncompressed data
+            finalData[2] = indicator; // Set the indicator
+
+            // Copy compressed data into the new array starting from index 2
+            System.arraycopy(compressedData, 0, finalData, 3, compressedData.length);
+
             return finalData;
         }
 
@@ -190,20 +198,18 @@ public class EvolvingMultiGraph {
             dos.writeInt(value);
         }
         dos.flush();
+        //compressedBytes has compressed data size, compressor flag, compressed data
         byte[] compressedBytes = baos.toByteArray();
 
-        // Write the size of the compressed data (in bits)
-        int compressedSize = compressedBytes.length * 8;
-        obs.writeInt(compressedSize, 32); // Write size
-
-        // Write compressed bytes to OutputBitStream bit by bit
+        // Write compressed bytes to OutputBitStream bit by bit = compressed data size, compressor flag , and then compressed data
         for (byte b : compressedBytes) {
             for (int i = 7; i >= 0; i--) {
                 obs.writeBit((b >> i) & 1);
             }
         }
+        //so finally, we have: compressed size, compressor flag, compressed data
 
-        ret += 32 + compressedBytes.length * 8; // Track bits written
+        ret += compressedBytes.length * 8; // Track bits written
         return ret;
     }
 
@@ -363,14 +369,15 @@ public class EvolvingMultiGraph {
 
         ibs.position(efindex.getLong(node));
 
+        // Read the size of the compressed data
+        int compressedSizeInBits  = ibs.readInt(32); // Size in bits
+        int uncompressedSizeInBits  = ibs.readInt(32); // Size in bits
+
         // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
         int compressionType = ibs.readInt(32);
 
-        // Read the size of the compressed data
-        int compressedSize = ibs.readInt(32); // Size in bits
-
         // Calculate the number of integers needed to store the compressed data
-        int[] compressedData = new int[compressedSize / 32];
+        int[] compressedData = new int[(compressedSizeInBits / 32)];
 
         // Read the compressed data as ints
         for (int i = 0; i < compressedData.length; i++) {
@@ -378,7 +385,7 @@ public class EvolvingMultiGraph {
         }
 
         // Decompress the data
-        int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType,compressedSize);
+        int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInBits);
 
         // Initialize index for accessing decompressed data
         int index = 0;
@@ -420,8 +427,6 @@ public class EvolvingMultiGraph {
         long previous;                       // To keep track of the previous timestamp
         int[] decompressedData;              // To store decompressed timestamps
         int index = 0;                       // Index for decompressedData
-        int nextNeighbor;                    // To hold the next neighbor value
-        boolean hasNext;                     // Flag to indicate if there are more elements
 
         public SuccessorIterator(int node) throws Exception {
             neighborsIterator = graph.successors(node);
@@ -433,24 +438,24 @@ public class EvolvingMultiGraph {
             long position = efindex.getLong(node);
             ibs.position(position);
 
+            // Read the size of the compressed data
+            int compressedSizeInBits  = ibs.readInt(32); // compressed size in bits
+            int uncompressedSizeInBits  = ibs.readInt(32); // uncompressed size in bits
+
             // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
             int compressionType = ibs.readInt(32);
 
-            // Read the size of the compressed data
-            int compressedSize = ibs.readInt(32); // Size in bits
-            int[] compressedData = new int[compressedSize / 32]; // Initialize array to hold compressed data
+            // Calculate the number of integers needed to store the compressed data
+            int[] compressedData = new int[(compressedSizeInBits / 32)];
 
+            // Read the compressed data as ints
             for (int i = 0; i < compressedData.length; i++) {
-                compressedData[i] = ibs.readInt(32); // Read the compressed ints
+                compressedData[i] = ibs.readInt(32); // Each int is 32 bits
             }
 
             // Decompress the data
-            decompressedData = combinedCompressor.uncompress(compressedData,compressionType,compressedSize);
+            int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInBits);
             previous = minTimestamp; // Initialize previous timestamp
-
-            // Check for the first neighbor
-            nextNeighbor = neighborsIterator.nextInt();
-            hasNext = (nextNeighbor != -1); // Update hasNext based on first neighbor
         }
 
         @Override
@@ -460,28 +465,19 @@ public class EvolvingMultiGraph {
 
         @Override
         public Successor next() throws NoSuchElementException {
-            if (!hasNext) {
-                throw new NoSuchElementException("No more successors available");
+            int neighbor = neighborsIterator.nextInt();
+            if(neighbor == -1) {
+                throw new NoSuchElementException();
             }
-
-            // Get the current neighbor value
-            int neighbor = nextNeighbor;
             long t;
-
-            // Get the timestamp for the current neighbor
             if (index < decompressedData.length) {
                 t = Fast.nat2int(decompressedData[index]);
                 t = TimestampComparerAggregator.reverse(previous, t, aggregationFactor);
-                previous = t; // Update previous for the next timestamp
+                previous = t;
                 index++;
             } else {
                 throw new NoSuchElementException("No more timestamps available");
             }
-
-            // Prepare for the next call to next()
-            nextNeighbor = neighborsIterator.nextInt(); // Fetch the next neighbor
-            hasNext = (nextNeighbor != -1); // Update the hasNext flag
-
             return new Successor(neighbor, t);
         }
     }
