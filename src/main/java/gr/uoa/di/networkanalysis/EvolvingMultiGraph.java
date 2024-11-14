@@ -65,8 +65,8 @@ public class EvolvingMultiGraph {
             int[] finalData = new int[compressedData.length + 3]; // +1 for size, +1 for indicator
 
             // Set size as the first element
-            finalData[0] = compressedData.length; // Size of the compressed data
-            finalData[1] = uncompressedSize; // Size of the uncompressed data
+            finalData[0] = compressedData.length; // Size of the compressed data in ints!
+            finalData[1] = uncompressedSize; // Size of the uncompressed data in ints!
             finalData[2] = indicator; // Set the indicator
 
             // Copy compressed data into the new array starting from index 2
@@ -201,7 +201,7 @@ public class EvolvingMultiGraph {
         //compressedBytes has compressed data size, compressor flag, compressed data
         byte[] compressedBytes = baos.toByteArray();
 
-        // Write compressed bytes to OutputBitStream bit by bit = compressed data size, compressor flag , and then compressed data
+        // Write compressed bytes to OutputBitStream bit by bit = compressed data size (shows size in ints), uncompressed data size (shows size in ints), compressor flag , and then compressed data
         for (byte b : compressedBytes) {
             for (int i = 7; i >= 0; i--) {
                 obs.writeBit((b >> i) & 1);
@@ -370,14 +370,14 @@ public class EvolvingMultiGraph {
         ibs.position(efindex.getLong(node));
 
         // Read the size of the compressed data
-        int compressedSizeInBits  = ibs.readInt(32); // Size in bits
-        int uncompressedSizeInBits  = ibs.readInt(32); // Size in bits
+        int compressedSizeInInts  = ibs.readInt(32); // Size in bits
+        int uncompressedSizeInInts  = ibs.readInt(32); // Size in bits
 
         // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
         int compressionType = ibs.readInt(32);
 
         // Calculate the number of integers needed to store the compressed data
-        int[] compressedData = new int[(compressedSizeInBits / 32)];
+        int[] compressedData = new int[compressedSizeInInts];
 
         // Read the compressed data as ints
         for (int i = 0; i < compressedData.length; i++) {
@@ -385,7 +385,7 @@ public class EvolvingMultiGraph {
         }
 
         // Decompress the data
-        int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInBits);
+        int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInInts);
 
         // Initialize index for accessing decompressed data
         int index = 0;
@@ -439,14 +439,14 @@ public class EvolvingMultiGraph {
             ibs.position(position);
 
             // Read the size of the compressed data
-            int compressedSizeInBits  = ibs.readInt(32); // compressed size in bits
-            int uncompressedSizeInBits  = ibs.readInt(32); // uncompressed size in bits
+            int compressedSizeInInts  = ibs.readInt(32); // compressed size in bits
+            int uncompressedSizeInInts  = ibs.readInt(32); // uncompressed size in bits
 
             // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
             int compressionType = ibs.readInt(32);
 
             // Calculate the number of integers needed to store the compressed data
-            int[] compressedData = new int[(compressedSizeInBits / 32)];
+            int[] compressedData = new int[compressedSizeInInts];
 
             // Read the compressed data as ints
             for (int i = 0; i < compressedData.length; i++) {
@@ -454,7 +454,7 @@ public class EvolvingMultiGraph {
             }
 
             // Decompress the data
-            int[] decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInBits);
+            this.decompressedData = combinedCompressor.uncompress(compressedData, compressionType, uncompressedSizeInInts);
             previous = minTimestamp; // Initialize previous timestamp
         }
 
