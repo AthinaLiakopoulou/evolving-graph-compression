@@ -36,6 +36,11 @@ public class EvolvingMultiGraph {
 
     private static final int DELTA_THRESHOLD = 10;
 
+    DebugLogger percentages_debugLogger = new DebugLogger("percentages.txt");
+    private int uncompressedCounter = 0;
+    private int iicCounter = 0;
+    private int integerCODECCounter = 0;
+
     public class CombinedCompressor {
         private final IntegratedIntCompressor integratedCompressor;
         private final FastPFOR fastPForCompressor;
@@ -50,14 +55,17 @@ public class EvolvingMultiGraph {
         //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
             if (data.length < 128) {
+                uncompressedCounter++;
                 return prependCompressedSizeUncompressedSizeAndIndicator(data,2,data.length);
             }
             // Check if the data is suitable for delta compression
             if (isSmallDeltas(data)) {
+                iicCounter++;
                 // Use IntegratedIntCompressor for delta compression
                 int[] compressedData = integratedCompressor.compress(data);
                 return prependCompressedSizeUncompressedSizeAndIndicator(compressedData, 0,data.length); // Prepend 0 for IntegratedIntCompressor
             } else {
+                integerCODECCounter++;
                 // Use FastPFOR for standard compression
                 int[] compressedData = compressWithFastPFor(data);
                 return prependCompressedSizeUncompressedSizeAndIndicator(compressedData, 1,data.length); // Prepend 1 for FastPFOR
@@ -228,7 +236,24 @@ public class EvolvingMultiGraph {
     public void store() throws IOException, InterruptedException {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         executorService.execute(()-> {storeBVMultiGraph();});
-        executorService.execute(()-> {storeTimestampsAndIndex();});
+       // executorService.execute(()-> {storeTimestampsAndIndex();});
+        executorService.execute(()-> {
+            storeTimestampsAndIndex();
+            percentages_debugLogger.log("Sum of lists where length < 128 - uncompressed data: " + uncompressedCounter);
+            percentages_debugLogger.log("Compressed lists with Integrated Int Compressor: " + iicCounter);
+            percentages_debugLogger.log("Compressed lists with FastPFOR and variableByte Compressors: " + integerCODECCounter);
+            // Υπολογισμός ποσοστών
+            int totalLists = uncompressedCounter + iicCounter + integerCODECCounter;
+            if (totalLists > 0) {
+                double iiCompressedPercentage = (iicCounter * 100.0) / totalLists;
+                double integerCODECompressedPercentage = (integerCODECCounter * 100.0) / totalLists;
+                double uncompressedPercentage = (uncompressedCounter * 100.0) / totalLists;
+                percentages_debugLogger.log("Percentage of compressed data with Integrated Int Compressor: " + iiCompressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of compressed data with FastPFOR and variableByte Compressors: " + integerCODECompressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of uncompressed data (length < 128): " + uncompressedPercentage + "%");
+            }
+            percentages_debugLogger.close();
+        });
         executorService.shutdown();
         executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
     }
@@ -556,3 +581,15 @@ public class EvolvingMultiGraph {
 
 
 }
+
+
+/*
+*
+* Sum of lists where length < 128 - uncompressed data: 135
+* Compressed lists with Integrated Int Compressor: 700
+* Compressed lists with FastPFOR and variableByte Compressors: 9124
+* Percentage of compressed data with Integrated Int Compressor: 7.028818154433176%
+* Percentage of compressed data with FastPFOR and variableByte Compressors: 91.61562405864042%
+* Percentage of uncompressed data (length < 128): 1.3555577869263982%
+*
+* */
