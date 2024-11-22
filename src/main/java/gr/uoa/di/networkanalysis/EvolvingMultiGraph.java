@@ -49,6 +49,9 @@ public class EvolvingMultiGraph {
 
         //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
+            if (data.length < 128) {
+                return prependCompressedSizeUncompressedSizeAndIndicator(data,2,data.length);
+            }
             // Check if the data is suitable for delta compression
             if (isSmallDeltas(data)) {
                 // Use IntegratedIntCompressor for delta compression
@@ -110,9 +113,13 @@ public class EvolvingMultiGraph {
             if (compressionType == 0) {
                 // Uncompress using IntegratedIntCompressor
                 return integratedCompressor.uncompress(compressedData);
-            } else {
+            } else if (compressionType == 1) {
                 // Uncompress using FastPFOR
                 return uncompressWithFastPFor(compressedData,uncompressedSize);
+            }
+            else {
+                // Data already uncompressed
+                return compressedData;
             }
         }
 
@@ -375,7 +382,7 @@ public class EvolvingMultiGraph {
         int compressedSizeInInts  = ibs.readInt(32); // Size in bits
         int uncompressedSizeInInts  = ibs.readInt(32); // Size in bits
 
-        // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
+        // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR, 2 for uncompressed data)
         int compressionType = ibs.readInt(32);
 
         // Calculate the number of integers needed to store the compressed data
@@ -444,7 +451,7 @@ public class EvolvingMultiGraph {
             int compressedSizeInInts  = ibs.readInt(32); // compressed size in bits
             int uncompressedSizeInInts  = ibs.readInt(32); // uncompressed size in bits
 
-            // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR)
+            // Read the compression type (0 for IntegratedIntCompressor, 1 for FastPFOR, 2 for uncompressed data)
             int compressionType = ibs.readInt(32);
 
             // Calculate the number of integers needed to store the compressed data
