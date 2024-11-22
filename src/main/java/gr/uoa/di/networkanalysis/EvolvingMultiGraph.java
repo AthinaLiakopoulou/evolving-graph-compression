@@ -15,8 +15,7 @@ import it.unimi.dsi.io.InputBitStream;
 import it.unimi.dsi.io.OutputBitStream;
 import it.unimi.dsi.sux4j.util.EliasFanoMonotoneLongBigList;
 import it.unimi.dsi.webgraph.LazyIntIterator;
-import me.lemire.integercompression.FastPFOR;
-import me.lemire.integercompression.IntWrapper;
+import me.lemire.integercompression.*;
 import me.lemire.integercompression.differential.IntegratedIntCompressor;
 
 public class EvolvingMultiGraph {
@@ -40,10 +39,12 @@ public class EvolvingMultiGraph {
     public class CombinedCompressor {
         private final IntegratedIntCompressor integratedCompressor;
         private final FastPFOR fastPForCompressor;
+        private final VariableByte variableByte;
 
         public CombinedCompressor() {
             this.integratedCompressor = new IntegratedIntCompressor();
             this.fastPForCompressor = new FastPFOR();
+            this.variableByte = new VariableByte();
         }
 
         //compress returns compressor flag, compressed data
@@ -86,7 +87,7 @@ public class EvolvingMultiGraph {
                     data.length / 256 accounts for potential overhead since FastPFOR operates on blocks of 256 integers.
                     +16 provides extra space to account for any additional overhead or metadata that might be needed during compression.
            If the array is too small, the compression will fail or truncate the data.*/
-
+            IntegerCODEC codec = new Composition(fastPForCompressor, this.variableByte);
             int[] compressedData = new int[data.length + (data.length / 256) + 16];
             //keeps track of how many integers have been read from the input array.
             IntWrapper inPos = new IntWrapper(0);
@@ -94,7 +95,7 @@ public class EvolvingMultiGraph {
             IntWrapper outPos = new IntWrapper(0);
 
             // Call the FastPFOR compress method
-            fastPForCompressor.compress(data, inPos, data.length, compressedData, outPos);
+            codec.compress(data, inPos, data.length, compressedData, outPos);
 
             // Resize the output array to the actual size
             int compressedSize = outPos.get();
@@ -116,6 +117,7 @@ public class EvolvingMultiGraph {
         }
 
         private int[] uncompressWithFastPFor(int[] compressedData, int uncompressedSize) {
+            IntegerCODEC codec = new Composition(fastPForCompressor, this.variableByte);
             // Prepare output array with the size of the uncompressed data
             int[] uncompressedData = new int[uncompressedSize];
 
@@ -124,7 +126,7 @@ public class EvolvingMultiGraph {
             IntWrapper outPos = new IntWrapper(0);
 
             // Call the FastPFOR uncompress method
-            fastPForCompressor.uncompress(compressedData, inPos, compressedData.length, uncompressedData, outPos);
+            codec.uncompress(compressedData, inPos, compressedData.length, uncompressedData, outPos);
 
             return uncompressedData;
         }
