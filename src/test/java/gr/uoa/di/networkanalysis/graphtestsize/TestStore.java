@@ -111,6 +111,7 @@ public class TestStore {
             }
             else {
             	// Check the list so far
+				list.sort(Comparator.comparing(Successor::getTimestamp));
             	SuccessorIterator it = emg.successors(current);
             	int i = 0;
         		while(true) {
@@ -129,7 +130,7 @@ public class TestStore {
             	current = node;
             }
         }
-
+		list.sort(Comparator.comparing(Successor::getTimestamp));
         SuccessorIterator it = emg.successors(current);
     	int i = 0;
 		while(true) {

@@ -175,6 +175,9 @@ public class EvolvingMultiGraph {
 
     protected long writeTimestampsToFile(List<Long> currentNeighborsTimestamps, OutputBitStream obs, long minTimestamp) throws IOException {
 
+        // Sort timestamps in ascending order
+        currentNeighborsTimestamps.sort(Long::compareTo);
+
         // Returns the number of bits appended to the file
         long ret = 0;
         long previousNeighborTimestamp = minTimestamp;
