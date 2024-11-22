@@ -45,7 +45,7 @@ public class TestStore {
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
-	private static int aggregation = 1;
+	private static double aggregation =  0.00001;
 
 	// cbtPow
 //	private static final String graphFile =  "cbtPow-sorted.txt.gz";
@@ -111,6 +111,7 @@ public class TestStore {
             }
             else {
             	// Check the list so far
+				list.sort(Comparator.comparing(Successor::getTimestamp));
             	SuccessorIterator it = emg.successors(current);
             	int i = 0;
         		while(true) {
@@ -129,7 +130,7 @@ public class TestStore {
             	current = node;
             }
         }
-
+		list.sort(Comparator.comparing(Successor::getTimestamp));
         SuccessorIterator it = emg.successors(current);
     	int i = 0;
 		while(true) {

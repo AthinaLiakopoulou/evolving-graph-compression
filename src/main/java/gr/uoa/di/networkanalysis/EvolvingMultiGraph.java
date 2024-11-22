@@ -23,7 +23,7 @@ public class EvolvingMultiGraph {
     protected String graphFile;
     protected boolean headers;
     protected String basename;
-    protected long aggregationFactor;
+    protected double aggregationFactor;
 
     protected BVMultiGraph graph;
     protected EliasFanoMonotoneLongBigList efindex;
@@ -157,7 +157,7 @@ public class EvolvingMultiGraph {
     CombinedCompressor combinedCompressor = new CombinedCompressor();
 
 
-    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, long aggregationFactor) {
+    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, double aggregationFactor) {
         super();
         this.graphFile = graphFile;
         this.headers = headers;
@@ -182,6 +182,9 @@ public class EvolvingMultiGraph {
 
     protected long writeTimestampsToFile(List<Long> currentNeighborsTimestamps, OutputBitStream obs, long minTimestamp) throws IOException {
 
+        // Sort timestamps in ascending order
+        currentNeighborsTimestamps.sort(Long::compareTo);
+
         // Returns the number of bits appended to the file
         long ret = 0;
         long previousNeighborTimestamp = minTimestamp;
@@ -189,8 +192,8 @@ public class EvolvingMultiGraph {
 
         // Calculate the periods between the current and previous timestamps
         for(Long seconds: currentNeighborsTimestamps) {
-            long periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
-            periodsBetween = Fast.int2nat(periodsBetween);
+            double periodsBetween = TimestampComparerAggregator.timestampsDifference(previousNeighborTimestamp, seconds, aggregationFactor);
+            periodsBetween = Fast.int2nat(Math.round(periodsBetween));
             periodsBetweenList.add((int) periodsBetween);  // Store the period
             previousNeighborTimestamp = seconds;
         }
