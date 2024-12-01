@@ -54,7 +54,7 @@ public class EvolvingMultiGraph {
 
         //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
-            if (data.length < 128) {
+            if (data.length < 256) {
                 uncompressedCounter++;
                 return prependCompressedSizeUncompressedSizeAndIndicator(data,2,data.length);
             }
@@ -239,7 +239,7 @@ public class EvolvingMultiGraph {
        // executorService.execute(()-> {storeTimestampsAndIndex();});
         executorService.execute(()-> {
             storeTimestampsAndIndex();
-            percentages_debugLogger.log("Sum of lists where length < 128 - uncompressed data: " + uncompressedCounter);
+            percentages_debugLogger.log("Sum of lists where length < 256 - uncompressed data: " + uncompressedCounter);
             percentages_debugLogger.log("Compressed lists with Integrated Int Compressor: " + iicCounter);
             percentages_debugLogger.log("Compressed lists with FastPFOR and variableByte Compressors: " + integerCODECCounter);
             // Υπολογισμός ποσοστών
@@ -250,7 +250,7 @@ public class EvolvingMultiGraph {
                 double uncompressedPercentage = (uncompressedCounter * 100.0) / totalLists;
                 percentages_debugLogger.log("Percentage of compressed data with Integrated Int Compressor: " + iiCompressedPercentage + "%");
                 percentages_debugLogger.log("Percentage of compressed data with FastPFOR and variableByte Compressors: " + integerCODECompressedPercentage + "%");
-                percentages_debugLogger.log("Percentage of uncompressed data (length < 128): " + uncompressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of uncompressed data (length < 256): " + uncompressedPercentage + "%");
             }
             percentages_debugLogger.close();
         });
@@ -592,4 +592,26 @@ public class EvolvingMultiGraph {
 * Percentage of compressed data with FastPFOR and variableByte Compressors: 91.61562405864042%
 * Percentage of uncompressed data (length < 128): 1.3555577869263982%
 *
+* Sum of lists where length < 32 - uncompressed data: 73
+* Compressed lists with Integrated Int Compressor: 700
+* Compressed lists with FastPFOR and variableByte Compressors: 9186
+* Percentage of compressed data with Integrated Int Compressor: 7.028818154433176%
+* Percentage of compressed data with FastPFOR and variableByte Compressors: 92.23817652374737%
+* Percentage of uncompressed data (length < 32): 0.7330053218194598%
+*
+*
+* Sum of lists where length < 64 - uncompressed data: 105
+* Compressed lists with Integrated Int Compressor: 700
+* Compressed lists with FastPFOR and variableByte Compressors: 9154
+* Percentage of compressed data with Integrated Int Compressor: 7.028818154433176%
+* Percentage of compressed data with FastPFOR and variableByte Compressors: 91.91685912240185%
+* Percentage of uncompressed data (length < 64): 1.0543227231649763%
+*
+*
+* Sum of lists where length < 256 - uncompressed data: 194
+* Compressed lists with Integrated Int Compressor: 691
+* Compressed lists with FastPFOR and variableByte Compressors: 9074
+* Percentage of compressed data with Integrated Int Compressor: 6.938447635304749%
+* Percentage of compressed data with FastPFOR and variableByte Compressors: 91.11356561903806%
+* Percentage of uncompressed data (length < 256): 1.9479867456571944%
 * */
