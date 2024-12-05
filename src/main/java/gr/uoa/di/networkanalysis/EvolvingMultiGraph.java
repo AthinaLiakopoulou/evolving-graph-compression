@@ -54,7 +54,7 @@ public class EvolvingMultiGraph {
 
         //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
-            if (data.length < 256) {
+            if (data.length < 128) {
                 uncompressedCounter++;
                 return prependCompressedSizeUncompressedSizeAndIndicator(data,2,data.length);
             }
@@ -239,7 +239,7 @@ public class EvolvingMultiGraph {
        // executorService.execute(()-> {storeTimestampsAndIndex();});
         executorService.execute(()-> {
             storeTimestampsAndIndex();
-            percentages_debugLogger.log("Sum of lists where length < 256 - uncompressed data: " + uncompressedCounter);
+            percentages_debugLogger.log("Sum of lists where length < 128 - uncompressed data: " + uncompressedCounter);
             percentages_debugLogger.log("Compressed lists with Integrated Int Compressor: " + iicCounter);
             percentages_debugLogger.log("Compressed lists with FastPFOR and variableByte Compressors: " + integerCODECCounter);
             // Υπολογισμός ποσοστών
@@ -250,7 +250,7 @@ public class EvolvingMultiGraph {
                 double uncompressedPercentage = (uncompressedCounter * 100.0) / totalLists;
                 percentages_debugLogger.log("Percentage of compressed data with Integrated Int Compressor: " + iiCompressedPercentage + "%");
                 percentages_debugLogger.log("Percentage of compressed data with FastPFOR and variableByte Compressors: " + integerCODECompressedPercentage + "%");
-                percentages_debugLogger.log("Percentage of uncompressed data (length < 256): " + uncompressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of uncompressed data (length < 128): " + uncompressedPercentage + "%");
             }
             percentages_debugLogger.close();
         });
