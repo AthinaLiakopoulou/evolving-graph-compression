@@ -5,9 +5,11 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.NoSuchElementException;
-import java.util.Objects;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
 import java.util.zip.GZIPInputStream;
 
 import com.google.common.io.Resources;
@@ -41,11 +43,11 @@ public class TestStore {
 //	private static int aggregation = 15*60;
 
 	// cbtComm
-	private static final String graphFile =  "cbtComm-sorted.txt.gz";
+	private static final String graphFile =  "out.flickr-growth.sorted.tsv.gz";
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
-	private static int aggregation = 1;
+	private static int aggregation = 24*60*60;
 
 	// cbtPow
 //	private static final String graphFile =  "cbtPow-sorted.txt.gz";
@@ -59,7 +61,8 @@ public class TestStore {
 	public void testStore() throws Exception {
 
 		ClassLoader classLoader = getClass().getClassLoader();
-		String graphFileResourcePath = classLoader.getResource(graphFile).getPath();
+//     String graphFileResourcePath = classLoader.getResource(graphFile).getPath();
+		String graphFileResourcePath = Paths.get("C:/uoa/evolving-graph-compression/datasets/" + graphFile).toString();
 
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
@@ -73,6 +76,23 @@ public class TestStore {
 		emg.store();
 		long t2 = System.nanoTime();
 		System.out.println("Compression took: " + (t2-t1) + " nanoseconds");
+
+		emg.load();
+		long arcs = emg.getGraph().numArcs();
+		try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(
+				Paths.get("."), basename+"*")) {
+			long totalSize = 0;
+			long timestampsSize = 0;
+			for (Path path : dirStream) {
+				System.out.println(path + " " + path.getFileName().toFile().length());
+				totalSize += path.getFileName().toFile().length();
+				if (path.toString().endsWith("timestamps") || path.toString().endsWith("efindex")) {
+					System.out.println(path + " " + path.getFileName().toFile().length());
+					timestampsSize += path.getFileName().toFile().length();
+				}
+			}
+			System.out.printf("TotalSize: %d\tTotalArcs: %d\tBits/contact:  %.2f\t%.2f%n", totalSize, arcs, totalSize * 8D / arcs, timestampsSize * 8D / arcs);
+		}
 	}
 	
 	@Test
