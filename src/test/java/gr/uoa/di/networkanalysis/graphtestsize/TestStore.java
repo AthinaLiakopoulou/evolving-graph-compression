@@ -44,12 +44,11 @@ public class TestStore {
 //	private static int aggregation = 15*60;
 
 	// cbtComm
-	private static final String graphFile =  "cbtPow-sorted.txt.gz";
-	private static String sampleFile = "cbtComm-sample.txt";
+	private static final String graphFile =  "out.flickr-growth.sorted.tsv.gz";
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
-	private static int aggregation = 1;
+	private static int aggregation = 24*60*60;
 
 	// cbtPow
 //	private static final String graphFile =  "cbtPow-sorted.txt.gz";
