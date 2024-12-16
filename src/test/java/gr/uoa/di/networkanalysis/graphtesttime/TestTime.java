@@ -94,7 +94,7 @@ public class TestTime {
         public void createCompressedGraph() throws IOException, InterruptedException {
             ClassLoader classLoader = getClass().getClassLoader();
             String graphFileResourcePath = classLoader.getResource(graphFile).getPath();
-            EvolvingMultiGraph emg = new EvolvingMultiGraph(graphFileResourcePath, headers, basename, aggregation);
+            EvolvingMultiGraph emg = new EvolvingMultiGraph(graphFileResourcePath, headers, k, basename, aggregation);
             emg.store();
         }
 
@@ -107,6 +107,7 @@ public class TestTime {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);
@@ -145,6 +146,7 @@ public class TestTime {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);
@@ -206,6 +208,7 @@ public class TestTime {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);
@@ -252,6 +255,7 @@ public class TestTime {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);

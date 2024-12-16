@@ -44,7 +44,7 @@ public class TestStore {
 //	private static int aggregation = 15*60;
 
 	// cbtComm
-	private static final String graphFile =  "out.flickr-growth.sorted.tsv.gz";
+	private static final String graphFile =  "cbtComm-sorted.txt.gz";
 	private static final String basename =  "cbtComm";
 	private static final boolean headers = false;
 	private static final int k = 2;
@@ -68,6 +68,7 @@ public class TestStore {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);
@@ -103,6 +104,7 @@ public class TestStore {
 		EvolvingMultiGraph emg = new EvolvingMultiGraph(
 				graphFileResourcePath,
 				headers,
+				k,
 				basename,
 				aggregation
 		);

@@ -1,6 +1,7 @@
 package gr.uoa.di.networkanalysis;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,7 +38,7 @@ public class EvolvingMultiGraph {
     private static final int DELTA_THRESHOLD = 10;
 
     DebugLogger percentages_debugLogger = new DebugLogger("percentages.txt");
-    private int uncompressedCounter = 0;
+    private int zetaCounter = 0;
     private int iicCounter = 0;
     private int integerCODECCounter = 0;
 
@@ -45,18 +46,21 @@ public class EvolvingMultiGraph {
         private final IntegratedIntCompressor integratedCompressor;
         private final FastPFOR fastPForCompressor;
         private final VariableByte variableByte;
+        private int zetaK;
 
-        public CombinedCompressor() {
+        public CombinedCompressor(int zetaK) {
             this.integratedCompressor = new IntegratedIntCompressor();
             this.fastPForCompressor = new FastPFOR();
             this.variableByte = new VariableByte();
+            this.zetaK = zetaK;
         }
 
         //compress returns compressor flag, compressed data
         public int[] compress(int[] data) {
             if (data.length < 128) {
-                uncompressedCounter++;
-                return prependCompressedSizeUncompressedSizeAndIndicator(data,2,data.length);
+                zetaCounter++;
+                int[] compressedData = compressWithZetaLong(data);
+                return prependCompressedSizeUncompressedSizeAndIndicator(compressedData,2,data.length);
             }
             // Check if the data is suitable for delta compression
             if (isSmallDeltas(data)) {
@@ -87,6 +91,37 @@ public class EvolvingMultiGraph {
             return finalData;
         }
 
+        private int[] compressWithZetaLong(int[] data) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            OutputBitStream obs = new OutputBitStream(baos);
+
+            try {
+                // Compress each integer using writeLongZeta
+                for (int value : data) {
+                    obs.writeLongZeta(value, zetaK);
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to compress with ZetaLong", e);
+            } finally {
+                try {
+                    obs.close();
+                } catch (IOException ignored) {}
+            }
+
+            byte[] compressedBytes = baos.toByteArray();
+
+            // Handle leftover bytes that don't fit in full 4-byte ints
+            int compressedIntsLength = (compressedBytes.length + 3) / 4; // Round up to fit remaining bytes
+            int[] compressedData = new int[compressedIntsLength];
+
+            // Use ByteBuffer to fill int array
+            ByteBuffer byteBuffer = ByteBuffer.wrap(compressedBytes);
+            byteBuffer.asIntBuffer().get(compressedData);
+
+            return compressedData;
+        }
+
+
         private int[] compressWithFastPFor(int[] data) {
             // Create output array with a reasonable size
            /*
@@ -116,7 +151,7 @@ public class EvolvingMultiGraph {
             return finalCompressedData;
         }
 
-        public int[] uncompress(int[] compressedData, int compressionType, int uncompressedSize) {
+        public int[] uncompress(int[] compressedData, int compressionType, int uncompressedSize) throws IOException {
 
             if (compressionType == 0) {
                 // Uncompress using IntegratedIntCompressor
@@ -125,10 +160,33 @@ public class EvolvingMultiGraph {
                 // Uncompress using FastPFOR
                 return uncompressWithFastPFor(compressedData,uncompressedSize);
             }
-            else {
-                // Data already uncompressed
-                return compressedData;
+            else if (compressionType == 2) {
+                // Uncompress using ZetaLong
+                return uncompressWithZetaLong(compressedData, uncompressedSize);
             }
+            else {
+                throw new IllegalArgumentException("Unknown compression type");
+            }
+        }
+
+        private int[] uncompressWithZetaLong(int[] compressedData, int uncompressedSize) throws IOException {
+            // Convert compressedData (int[]) back into a byte array
+            ByteBuffer buffer = ByteBuffer.allocate(compressedData.length * 4);
+            for (int value : compressedData) {
+                buffer.putInt(value);
+            }
+            byte[] compressedBytes = buffer.array();
+
+            // Initialize InputBitStream with the byte array
+            InputBitStream ibs = new InputBitStream(compressedBytes);
+
+            // Decompress each integer using readLongZeta
+            int[] decompressedData = new int[uncompressedSize];
+            for (int i = 0; i < uncompressedSize; i++) {
+                decompressedData[i] = (int) ibs.readLongZeta(zetaK); // Assuming input values fit in int
+            }
+
+            return decompressedData;
         }
 
         private int[] uncompressWithFastPFor(int[] compressedData, int uncompressedSize) {
@@ -162,16 +220,16 @@ public class EvolvingMultiGraph {
             return true;
         }
     }
-    CombinedCompressor combinedCompressor = new CombinedCompressor();
+    CombinedCompressor combinedCompressor = new CombinedCompressor(0);
 
 
-    public EvolvingMultiGraph(String graphFile, boolean headers, String basename, long aggregationFactor) {
+    public EvolvingMultiGraph(String graphFile, boolean headers, int zetaK, String basename, long aggregationFactor) {
         super();
         this.graphFile = graphFile;
         this.headers = headers;
         this.basename = basename;
         this.aggregationFactor = aggregationFactor;
-        this.combinedCompressor = new CombinedCompressor();
+        this.combinedCompressor = new CombinedCompressor(zetaK);
     }
 
     protected long findMinimumTimestamp() {
@@ -239,18 +297,18 @@ public class EvolvingMultiGraph {
        // executorService.execute(()-> {storeTimestampsAndIndex();});
         executorService.execute(()-> {
             storeTimestampsAndIndex();
-            percentages_debugLogger.log("Sum of lists where length < 128 - uncompressed data: " + uncompressedCounter);
+            percentages_debugLogger.log("Compressed lists with ZetaLong Compressor: " + zetaCounter);
             percentages_debugLogger.log("Compressed lists with Integrated Int Compressor: " + iicCounter);
             percentages_debugLogger.log("Compressed lists with FastPFOR and variableByte Compressors: " + integerCODECCounter);
             // Υπολογισμός ποσοστών
-            int totalLists = uncompressedCounter + iicCounter + integerCODECCounter;
+            int totalLists = zetaCounter + iicCounter + integerCODECCounter;
             if (totalLists > 0) {
                 double iiCompressedPercentage = (iicCounter * 100.0) / totalLists;
                 double integerCODECompressedPercentage = (integerCODECCounter * 100.0) / totalLists;
-                double uncompressedPercentage = (uncompressedCounter * 100.0) / totalLists;
+                double zetaLongPercentage = (zetaCounter * 100.0) / totalLists;
                 percentages_debugLogger.log("Percentage of compressed data with Integrated Int Compressor: " + iiCompressedPercentage + "%");
                 percentages_debugLogger.log("Percentage of compressed data with FastPFOR and variableByte Compressors: " + integerCODECompressedPercentage + "%");
-                percentages_debugLogger.log("Percentage of uncompressed data (length < 128): " + uncompressedPercentage + "%");
+                percentages_debugLogger.log("Percentage of compressed data with Zeta Long Compressor: " + zetaLongPercentage + "%");
             }
             percentages_debugLogger.close();
         });

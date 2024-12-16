@@ -33,6 +33,7 @@ public class Compress {
                     EvolvingMultiGraph emg = new EvolvingMultiGraph(
                             graphFile,
                             headers,
+                            k,
                             basename,
                             aggregations[j]
                             );
@@ -55,6 +56,7 @@ public class Compress {
             EvolvingMultiGraph emg = new EvolvingMultiGraph(
                     graphFile,
                     headers,
+                    k,
                     basename,
                     factor
                     );
