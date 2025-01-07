@@ -110,15 +110,26 @@ public class EvolvingMultiGraph {
 
             byte[] compressedBytes = baos.toByteArray();
 
-            // Handle leftover bytes that don't fit in full 4-byte ints
-            int compressedIntsLength = (compressedBytes.length + 3) / 4; // Round up to fit remaining bytes
-            int[] compressedData = new int[compressedIntsLength];
+            return convert(compressedBytes);
+        }
 
-            // Use ByteBuffer to fill int array
-            ByteBuffer byteBuffer = ByteBuffer.wrap(compressedBytes);
-            byteBuffer.asIntBuffer().get(compressedData);
+        public int[] convert(byte[] byteArray) {
+            int length = byteArray.length;
+            int intArrayLength = (length + 3) / 4; // Calculate the number of ints needed
+            int[] intArray = new int[intArrayLength];
 
-            return compressedData;
+            for (int i = 0; i < intArrayLength; i++) {
+                int value = 0;
+                for (int j = 0; j < 4; j++) {
+                    int index = i * 4 + j;
+                    if (index < length) {
+                        value |= (byteArray[index] & 0xFF) << (8 * (3 - j));
+                    }
+                }
+                intArray[i] = value;
+            }
+
+            return intArray;
         }
 
 
